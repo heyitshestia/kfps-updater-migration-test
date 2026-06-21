@@ -2291,7 +2291,118 @@ public partial class MainWindow : Window
         Log("Bundled Python is missing. Dependency checks cannot run in the native package.");
         MessageBox.Show(this, "Bundled Python is missing, so dependencies cannot be verified. Re-extract or replace the KFPS package.", "Bundled Python missing", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
-    private void UpdateFromGitHub(object sender, RoutedEventArgs e) => RunDetached("03_update_from_github.bat");
+    private void UpdateFromGitHub(object sender, RoutedEventArgs e)
+    {
+        var batchPath = Path.Combine(_appRoot, "03_update_from_github.bat");
+        if (!File.Exists(batchPath))
+        {
+            Log($"Missing updater: {batchPath}");
+            MessageBox.Show(this, "The updater batch file is missing from this package.", "Updater missing", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var response = MessageBox.Show(
+            this,
+            "KFPS needs to close before updating so Windows can replace the native app safely.\n\nThe updater will keep generated images and runtime data, then relaunch KFPS if the update succeeds.",
+            "Update KFPS",
+            MessageBoxButton.OKCancel,
+            MessageBoxImage.Information);
+        if (response != MessageBoxResult.OK)
+        {
+            return;
+        }
+
+        StartNativeUpdateHandoff(batchPath);
+    }
+
+    private void StartNativeUpdateHandoff(string batchPath)
+    {
+        try
+        {
+            var parentRoot = Directory.GetParent(_appRoot)?.FullName ?? _appRoot;
+            var handoffDir = Path.Combine(_appRoot, "runtime", "native-update");
+            Directory.CreateDirectory(handoffDir);
+
+            var scriptPath = Path.Combine(handoffDir, "run-native-update.ps1");
+            var logPath = Path.Combine(handoffDir, "native-update-handoff.log");
+            File.WriteAllText(scriptPath, BuildNativeUpdateHandoffScript(
+                _appRoot,
+                parentRoot,
+                batchPath,
+                Environment.ProcessId,
+                logPath), Encoding.UTF8);
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -ExecutionPolicy Bypass -File {Quote(scriptPath)}",
+                WorkingDirectory = _appRoot,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            Process.Start(startInfo);
+            Log("Updater handoff started. Closing KFPS so files can be replaced safely.");
+            Application.Current.Shutdown();
+        }
+        catch (Exception ex)
+        {
+            Log($"Failed to start native updater handoff: {ex.Message}");
+            MessageBox.Show(this, $"Could not start the updater handoff.\n\n{ex.Message}", "Update failed to start", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private static string BuildNativeUpdateHandoffScript(string appRoot, string parentRoot, string batchPath, int parentPid, string logPath)
+    {
+        static string PsLiteral(string value) => "'" + value.Replace("'", "''") + "'";
+
+        return $$"""
+$ErrorActionPreference = 'Continue'
+$appRoot = {{PsLiteral(appRoot)}}
+$parentRoot = {{PsLiteral(parentRoot)}}
+$batchPath = {{PsLiteral(batchPath)}}
+$logPath = {{PsLiteral(logPath)}}
+$parentPid = {{parentPid}}
+
+function Write-HandoffLog([string]$message) {
+    $stamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+    $dir = Split-Path -Parent $logPath
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    "[$stamp] $message" | Add-Content -LiteralPath $logPath -Encoding UTF8
+}
+
+Write-HandoffLog "Native update handoff started."
+try {
+    $parent = Get-Process -Id $parentPid -ErrorAction SilentlyContinue
+    if ($parent) {
+        Write-HandoffLog "Waiting for KFPS process $parentPid to exit."
+        Wait-Process -Id $parentPid -Timeout 60 -ErrorAction SilentlyContinue
+    }
+} catch {
+    Write-HandoffLog ("Parent wait warning: " + $_.Exception.Message)
+}
+
+Start-Sleep -Milliseconds 500
+$env:FORZA_PAINTER_NO_PAUSE = '1'
+Write-HandoffLog "Running updater batch."
+$process = Start-Process -FilePath $env:ComSpec -ArgumentList @('/c', "`"$batchPath`"") -WorkingDirectory $appRoot -Wait -PassThru -WindowStyle Normal
+$exitCode = if ($process) { $process.ExitCode } else { 1 }
+Write-HandoffLog "Updater batch exited with code $exitCode."
+
+if ($exitCode -eq 0) {
+    $kfps = Join-Path $parentRoot 'KFPS.exe'
+    if (Test-Path -LiteralPath $kfps) {
+        Write-HandoffLog "Relaunching KFPS."
+        Start-Process -FilePath $kfps -WorkingDirectory $parentRoot
+    } else {
+        Write-HandoffLog "KFPS.exe was not found after update."
+    }
+}
+
+Write-HandoffLog "Native update handoff finished."
+""";
+    }
 
     private void FirstLaunchInstallPython(object sender, RoutedEventArgs e)
     {
