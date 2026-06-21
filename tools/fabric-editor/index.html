@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KFPS Vinyl Editor</title>
+  <script>
+    document.documentElement.dataset.editorTheme = localStorage.getItem("kloudyFabricTheme") || "pastel";
+  </script>
+  <link rel="stylesheet" href="style.css">
+  <script src="vendor/fabric.min.js"></script>
+</head>
+<body>
+  <div class="editorShell">
+    <header class="appBar">
+      <div class="brandBlock">
+        <h1>KFPS Vinyl Editor</h1>
+        <div class="brandMeta">
+          <p>Import JSON, edit FH6 vinyl layers, validate, export.</p>
+          <label class="themePicker">Theme
+            <select id="editorThemeSelect" title="Change the editor theme.">
+              <option value="pastel">Signature Pink</option>
+              <option value="dark">Dark</option>
+            </select>
+            <button id="adjustTheme" type="button" title="Adjust the current editor color scheme and save it as a custom file-backed theme.">Adjust</button>
+            <button id="startEditorTour" type="button" title="Start an interactive guided tour of the editor workspace.">Tour</button>
+          </label>
+        </div>
+      </div>
+      <nav class="appMenus" aria-label="Editor actions">
+        <div class="menuGroup">
+          <span>File</span>
+          <button id="openJsonBrowser" title="Open the KFPS JSON browser for generated finals, editor exports, and exported JSONs.">Import JSON</button>
+          <input id="jsonInput" class="hiddenFileInput" type="file" accept=".json,application/json">
+          <button id="loadProject" title="Open internally saved editor projects.">Load Project</button>
+          <button id="saveProject" title="Save this editor state so you can keep editing later.">Save Project</button>
+        </div>
+        <div class="menuGroup">
+          <span>Edit</span>
+          <button id="undoBtn" title="Undo the last editor change.">Undo</button>
+          <button id="redoBtn" title="Redo the last undone editor change.">Redo</button>
+          <button id="duplicateLayer" title="Copy the selected layer(s).">Duplicate</button>
+          <button id="deleteLayer" title="Remove the selected layer(s).">Delete</button>
+          <button id="shortcutsBtn" title="Open editable editor shortcuts.">Shortcuts</button>
+        </div>
+        <div class="menuGroup">
+          <span>View</span>
+          <button id="fitView" title="Zoom to the loaded design.">Fit Design</button>
+          <button id="resetView" title="Reset to full FH6 bounds.">Reset View</button>
+          <button id="fitSelected" title="Zoom to selected layer(s).">Fit Selected</button>
+        </div>
+        <div class="menuGroup exportGroup">
+          <span>Export</span>
+          <button id="exportJson" class="primary" title="Export one FH6-compatible JSON for the KFPS importer.">Export FH6 JSON</button>
+          <button id="helpBtn">Help</button>
+        </div>
+      </nav>
+    </header>
+
+    <section class="contextBar">
+      <div class="contextItem">
+        <span class="contextLabel">Tool</span>
+        <b id="activeToolLabel">Select / Move</b>
+      </div>
+      <div class="contextItem">
+        <span class="contextLabel">Selection</span>
+        <b id="contextSelection">No layer selected</b>
+      </div>
+      <button id="quickColorSwatch" type="button" title="Open color picker and saved colors"></button>
+      <div class="quickActionGroup" aria-label="Selected layer quick actions">
+        <button id="quickDuplicateLayer" type="button" title="Duplicate selected layer(s). Respects Shape Click above/below placement mode.">Duplicate</button>
+        <button id="quickDeleteLayer" type="button" title="Delete selected layer(s).">Delete</button>
+        <button id="quickGroupSelected" type="button" title="Create an editor-only group from selected layers.">Group</button>
+        <button id="quickFitSelected" type="button" title="Zoom to selected layer(s).">Fit</button>
+      </div>
+      <div class="contextItem statusChip ready">
+        <span class="contextLabel">Export</span>
+        <b id="exportReadyChip">Ready</b>
+      </div>
+    </section>
+
+    <div id="busyBanner" hidden>
+      <div class="spinner"></div>
+      <span id="busyText">Working...</span>
+    </div>
+
+    <aside id="cornerNotice" class="cornerNotice" hidden>
+      <b id="cornerNoticeTitle">Saved</b>
+      <span id="cornerNoticeBody">Ready.</span>
+    </aside>
+
+    <div id="editorTourLayer" class="editorTourLayer" hidden>
+      <div id="editorTourBackdrop" class="editorTourBackdrop"></div>
+      <div id="editorTourSpotlight" class="editorTourSpotlight"></div>
+      <div id="editorTourCanvasPulse" class="editorTourCanvasPulse" hidden></div>
+      <section id="editorTourCard" class="editorTourCard" role="dialog" aria-live="polite" aria-label="Editor tour">
+        <div class="editorTourKicker" id="editorTourProgress">Tour</div>
+        <h2 id="editorTourTitle">Editor Tour</h2>
+        <p id="editorTourBody">Learn the editor basics.</p>
+        <div class="editorTourActions">
+          <button id="editorTourSkip" type="button">Skip</button>
+          <button id="editorTourBack" type="button">Back</button>
+          <button id="editorTourNext" class="primary" type="button">Next</button>
+        </div>
+      </section>
+    </div>
+
+    <main class="workspace">
+      <aside class="toolRail" aria-label="Tools">
+        <button class="toolButton active" data-tool-key="v" data-tool="Select / Move" data-tool-mode="select" title="Select, move, resize, rotate, or box-select vinyl layers.">V<span>Select</span></button>
+        <button class="toolButton" data-tool-key="s" data-tool="Shape Library" data-tool-mode="shapeLibrary" data-focus-panel="shapeLibraryPane" title="Open the shape library. Click a shape tile to place it in the viewport.">S<span>Shapes</span></button>
+        <button class="toolButton" data-tool-key="i" data-tool="Eyedropper" data-tool-mode="dropper" title="Pick color from an existing vinyl layer or from the overlay.">I<span>Dropper</span></button>
+        <button class="toolButton" data-tool-key="g" data-tool="Guides / Snap" data-tool-mode="guides" data-focus-panel="guidesPane" title="Draw editor-only guide lines and snap layers to them while holding Control.">G<span>Guides</span></button>
+        <button class="toolButton" data-tool-key="o" data-tool="Overlay / Reference" data-tool-mode="overlay" data-focus-panel="overlayPane" title="Open overlay/reference image controls.">O<span>Overlay</span></button>
+        <button class="toolButton" data-tool-key="r" data-tool="Source Move" data-tool-mode="source" data-focus-panel="overlayPane" title="Move the source overlay only. Vinyl layers and guides are ignored until another tool is selected.">R<span>Source</span></button>
+        <button id="maskSelectedTool" class="toolButton toolActionButton" type="button" title="Toggle selected layer(s) as FH mask/cutout layers. Masks punch through lower vinyl layers in the editor preview and export with the mask flag.">M<span>Mask</span></button>
+      </aside>
+
+      <section class="canvasStage">
+        <div id="editorGridLayer" class="editorGridLayer" hidden></div>
+        <canvas id="canvas" width="1280" height="860"></canvas>
+        <div class="emptyCanvasHint" id="emptyCanvasHint">
+          <h2>Open a vinyl JSON to start editing</h2>
+          <p>This editor edits FH6 vinyl layers, not normal image pixels.</p>
+        </div>
+        <div class="canvasHud" id="canvasHud">
+          <span id="hudMode">Select / edit</span>
+          <span id="hudCoords">x 0, y 0</span>
+          <span id="hudLayers">0 layers</span>
+          <span id="hudHover">over nothing</span>
+        </div>
+      </section>
+
+      <aside class="rightDock">
+        <div class="dockGroup primaryDock">
+          <div class="dockTabs" role="tablist">
+            <button class="dockTab active" data-panel="layersPane">Layers</button>
+            <button class="dockTab" data-panel="propertiesPane">Props</button>
+            <button class="dockTab" data-panel="shapeLibraryPane">Library</button>
+            <button class="dockTab" data-panel="colorPane">Color</button>
+            <button class="dockTab" data-panel="guidesPane">Guides</button>
+            <button class="dockTab" data-panel="textPane">Text</button>
+            <button class="dockTab" data-panel="overlayPane">Overlay</button>
+            <button class="dockTab" data-panel="historyPane">History</button>
+            <button class="dockTab" data-panel="exportCheckPane">Export</button>
+          </div>
+
+          <section id="layersPane" class="dockPane active">
+            <div class="panelHeader">
+              <div>
+                <h2>Layers</h2>
+                <p>Top rows draw over lower rows.</p>
+              </div>
+              <b id="layerLimitMeter">0 / template</b>
+            </div>
+            <div id="layerInfo">No JSON loaded.</div>
+            <input id="layerSearch" placeholder="Filter layers by name, type, or number">
+            <div class="smallTools">
+              <button id="bringForward" title="Move selected layer(s) one step toward the top/front.">Forward</button>
+              <button id="sendBackward" title="Move selected layer(s) one step toward the bottom/back.">Back</button>
+              <button id="selectionLockToggle" title="Keep the current selection active through accidental canvas misclicks." aria-pressed="false">Lock Selection</button>
+              <button id="groupSelected" title="Create an editor-only group from the selected layers. Exports stay flat.">Group</button>
+              <button id="renameSelectedGroup" title="Rename the selected editor-only group. Exports stay flat.">Rename Group</button>
+              <button id="hideSelectedGroup" title="Hide or show every layer in the selected editor group.">Hide Group</button>
+              <button id="lockSelectedGroup" title="Lock or unlock every layer in the selected editor group.">Lock Group</button>
+              <button id="ungroupSelected" title="Remove selected layers from their editor-only group.">Ungroup</button>
+              <button id="changeSelectedShape" title="With layers selected, replace those layers. With nothing selected, choose a used shape type to replace globally.">Change Shape</button>
+            </div>
+            <div id="globalShapeReplacePanel" class="globalShapeReplacePanel" hidden>
+              <div class="panelHeader compactHeader">
+                <div>
+                  <h3>Choose Used Shape</h3>
+                  <p>Pick one shape type used in this design, then click its replacement in Shape Library.</p>
+                </div>
+                <button id="cancelGlobalShapeReplace" type="button">Cancel</button>
+              </div>
+              <div id="globalShapeReplaceList" class="globalShapeReplaceList"></div>
+            </div>
+            <ol id="layers"></ol>
+          </section>
+
+          <section id="propertiesPane" class="dockPane" hidden>
+            <div class="panelHeader">
+              <div>
+                <h2>Properties</h2>
+                <p>Selected FH6 layer controls.</p>
+              </div>
+            </div>
+            <div class="selectedCard">
+              <b id="selectedShapeName">No layer selected</b>
+              <small id="selectedShapeCode">Click a layer or a shape tile.</small>
+            </div>
+            <div class="propertySection">
+              <h3>Appearance</h3>
+              <label>Color
+                <span class="colorControlGroup">
+                  <button id="colorSwatchButton" type="button" title="Open color picker and saved colors"></button>
+                  <button id="colorEyedropper" class="iconButton" type="button" title="Pick color from canvas">⌕</button>
+                  <input id="colorPicker" class="hiddenColorInput" type="color" value="#ffffff" aria-hidden="true" tabindex="-1">
+                </span>
+              </label>
+              <label>Alpha <input id="opacitySlider" type="range" min="0" max="255" value="255" disabled></label>
+              <button id="applyColorToSelection" type="button" title="Apply the active color and alpha to every selected unlocked layer." disabled>Apply Color To Selection</button>
+              <button id="equalizeAlpha" type="button" title="Set every selected layer to the first selected layer's alpha." disabled>Equalize Alpha</button>
+            </div>
+            <div class="propertySection">
+              <h3>Transform</h3>
+              <div class="fieldGrid">
+                <label>X <input id="xInput" type="number" step="0.01"></label>
+                <label>Y <input id="yInput" type="number" step="0.01"></label>
+                <label>Scale X <input id="sxInput" type="number" step="0.001"></label>
+                <label>Scale Y <input id="syInput" type="number" step="0.001"></label>
+                <label>Rotation <input id="rotInput" type="number" step="0.01"></label>
+                <label>Skew X deg <input id="skewInput" type="number" step="0.1"></label>
+              </div>
+              <button id="applyFields">Apply Selected Values</button>
+            </div>
+            <div class="propertySection">
+              <h3>Nudge</h3>
+              <label>Nudge step <input id="nudgeStep" type="number" step="0.1" value="1"></label>
+              <label class="inline"><input id="pixelSelect" type="checkbox" checked> Select only visible pixels</label>
+            </div>
+            <div class="propertySection">
+              <h3>Selection Behavior</h3>
+              <label class="inline" title="When on, clicks must land on the visible shape itself. Turn off only when you intentionally want box-style picking.">
+                <input id="boxVisibleOnly" type="checkbox" checked> Visible-only select
+              </label>
+              <label class="inline" title="Box-select everything outside the dragged box instead of inside it. Single clicks are unaffected.">
+                <input id="invertBoxSelect" type="checkbox"> Invert box select
+              </label>
+            </div>
+          </section>
+
+          <section id="shapeLibraryPane" class="dockPane" hidden>
+            <div class="panelHeader">
+              <div>
+                <h2>Shape Library</h2>
+                <p>Click a tile to place it in the viewport.</p>
+              </div>
+            </div>
+            <input id="shapeSearch" placeholder="Search name, number, family, or type code">
+            <select id="shapeFamily"></select>
+            <div class="shapePlacementPanel">
+              <label class="shapePlacementSelect" title="Choose what happens when you click a shape tile.">
+                Shape click
+                <select id="shapePlacementMode" title="Choose where a clicked shape tile is added.">
+                  <option value="top" selected>Add at top</option>
+                  <option value="above">Insert above selected</option>
+                  <option value="below">Insert below selected</option>
+                  <option value="replace">Replace selected shape</option>
+                </select>
+              </label>
+              <b>Current mode: <span id="shapePlacementModeLabel">Add at top</span></b>
+              <label class="inline" title="When adding font shapes, reuse the last edited font size and rotation.">
+                <input id="reuseLastFontSize" type="checkbox"> Reuse last font size
+              </label>
+              <p class="hint">Replace keeps position, color, alpha, group, lock, and layer order. Above/below need a selected layer.</p>
+            </div>
+            <div class="smallTools">
+              <button id="showAllShapes">All</button>
+              <button id="showFavorites">Favorites</button>
+            </div>
+            <div id="shapeGrid"></div>
+          </section>
+
+          <section id="colorPane" class="dockPane" hidden>
+            <div class="panelHeader">
+              <div>
+                <h2>Color</h2>
+                <p>Active color, saved colors, overlay sampling.</p>
+              </div>
+            </div>
+            <div class="colorPanelSummary">
+              <button id="colorPanelSwatch" type="button" title="Open saved colors"></button>
+              <div>
+                <b id="colorPanelLabel">#FFFFFF</b>
+                <p>New shapes use the active color unless live overlay color is enabled.</p>
+              </div>
+            </div>
+            <button id="sampleOverlayColor" title="Set selected layer color from the dominant overlay color under its current bounds.">Sample overlay under selection</button>
+            <label title="Dropper samples a vinyl layer if clicked, otherwise it samples the source overlay.">Dropper
+              <select id="eyedropperMode" disabled>
+                <option value="auto" selected>Auto layer/overlay</option>
+              </select>
+            </label>
+            <label>Mode
+              <select id="overlaySampleMode">
+                <option value="dominant" selected>Dominant color under shape</option>
+                <option value="average">Average color under shape</option>
+              </select>
+            </label>
+            <label class="inline"><input id="autoOverlayColor" type="checkbox"> Live auto color from overlay</label>
+          </section>
+
+          <section id="guidesPane" class="dockPane" hidden>
+            <div class="panelHeader">
+              <div>
+                <h2>Guides / Snap</h2>
+                <p>Editor-only alignment helpers. Never exported.</p>
+              </div>
+              <span class="badge" id="guideCountBadge">0 guides</span>
+            </div>
+            <div class="guideStatusCard">
+              <b id="guideModeLabel">Select the Guides tool to draw lines.</b>
+              <p id="guideStatus">Hold Control while moving a layer to snap it to visible grid or guide lines.</p>
+            </div>
+            <div class="propertySection compactSection">
+              <h3>Grid</h3>
+              <label class="inline"><input id="gridEnabled" type="checkbox"> Show grid</label>
+              <label>Grid size <input id="gridSize" type="number" min="5" max="500" step="5" value="50"></label>
+              <label>Opacity <input id="gridOpacity" type="range" min="5" max="65" value="20"></label>
+              <label class="inline"><input id="snapGrid" type="checkbox" checked> Snap to grid too</label>
+            </div>
+            <div class="propertySection compactSection pixelArtSection">
+              <h3>Pixel Art Auto Fill</h3>
+              <input id="pixelArtInput" type="file" accept="image/*">
+              <div class="fieldGrid">
+                <label>Detected W <input id="pixelArtGridW" type="number" min="1" max="512" step="1" value="0" readonly></label>
+                <label>Detected H <input id="pixelArtGridH" type="number" min="1" max="512" step="1" value="0" readonly></label>
+                <label>Alpha <input id="pixelArtAlphaCutoff" type="number" min="0" max="255" step="1" value="128"></label>
+                <label>Tolerance <input id="pixelArtTolerance" type="number" min="0" max="80" step="1" value="24"></label>
+              </div>
+              <label class="inline"><input id="pixelArtClearPrevious" type="checkbox" checked> Replace previous pixel-art group</label>
+              <button id="generatePixelArt" type="button">Generate pixel rectangles</button>
+              <p id="pixelArtStatus" class="hint">Detects the source pixel grid, fills height, and merges same-color pixel blocks into stretched square layers.</p>
+            </div>
+            <div class="propertySection compactSection">
+              <h3>Guide Drawing</h3>
+              <label>Line type
+                <select id="guideConstraint">
+                  <option value="free">Free line</option>
+                  <option value="horizontal">X axis / horizontal</option>
+                  <option value="vertical">Y axis / vertical</option>
+                </select>
+              </label>
+              <label class="inline"><input id="snapGuideAnchor" type="checkbox"> Anchor starts on grid</label>
+              <label class="inline"><input id="snapGuideEnd" type="checkbox"> End also snaps to grid</label>
+              <p class="hint">Horizontal locks the second point to the anchor's Y line. Vertical locks it to the anchor's X line.</p>
+            </div>
+            <div class="propertySection compactSection">
+              <h3>Snapping</h3>
+              <label class="inline"><input id="guidesVisible" type="checkbox" checked> Show guide lines</label>
+              <label class="inline"><input id="snapGuides" type="checkbox" checked> Snap to guides</label>
+              <label class="inline"><input id="snapCtrlOnly" type="checkbox" checked> Only snap while holding Control</label>
+              <label>Snap strength <input id="snapThreshold" type="range" min="4" max="28" value="12"></label>
+            </div>
+            <div class="smallTools">
+              <button id="deleteGuide" title="Delete the selected guide line.">Delete Selected Guide</button>
+              <button id="clearGuides" title="Remove every guide line and grid helper.">Clear Guides</button>
+            </div>
+          </section>
+
+          <section id="textPane" class="dockPane" hidden>
+            <div class="panelHeader">
+              <div>
+                <h2>Text</h2>
+                <p>Generate editable vinyl text from real Forza font shapes.</p>
+              </div>
+            </div>
+            <div class="propertySection compactSection textVinylSection">
+              <h3>Forza Text To Vinyl</h3>
+              <textarea id="textVinylInput" rows="4" placeholder="Type text to convert into editable vinyl layers"></textarea>
+              <div class="fieldGrid">
+                <label>Forza font
+                  <select id="textVinylForzaFont">
+                    <option value="1">Forza Font 1</option>
+                    <option value="2">Forza Font 2</option>
+                    <option value="3">Forza Font 3</option>
+                    <option value="4">Forza Font 4</option>
+                    <option value="5">Forza Font 5</option>
+                    <option value="6">Forza Font 6</option>
+                    <option value="7">Forza Font 7</option>
+                    <option value="8">Forza Font 8</option>
+                    <option value="9">Forza Font 9</option>
+                    <option value="10">Forza Font 10</option>
+                    <option value="11">Forza Font 11</option>
+                  </select>
+                </label>
+                <label>Height <input id="textVinylHeight" type="number" min="20" max="2000" step="10" value="360"></label>
+              </div>
+              <label class="inline"><input id="textVinylClearPrevious" type="checkbox" checked> Replace previous text group</label>
+              <button id="generateTextVinyl" type="button">Generate text vinyl</button>
+              <p id="textVinylStatus" class="hint">Uses real in-game Forza letter shapes. Unsupported characters are skipped. Custom-font fitting is archived for later research.</p>
+            </div>
+          </section>
+
+          <section id="overlayPane" class="dockPane" hidden>
+            <div class="panelHeader">
+              <div>
+                <h2>Overlay / Reference</h2>
+                <p>Reference only. Never exported.</p>
+              </div>
+              <span class="badge">Not exported</span>
+            </div>
+            <label class="fileButton wide">
+              Add / Replace Overlay
+              <input id="overlayInput" type="file" accept="image/*,.svg,image/svg+xml">
+            </label>
+            <label>Opacity <input id="overlayOpacity" type="range" min="0" max="100" value="45"></label>
+            <label class="rangeWithValue">Size %
+              <input id="overlayScale" type="range" min="10" max="400" value="100">
+              <input id="overlayScalePercent" class="percentInput" type="number" min="10" max="400" step="1" value="100" aria-label="Overlay size percent">
+            </label>
+            <label>Layer position
+              <select id="overlayLayerMode" title="Choose whether the source reference draws below or above vinyl layers.">
+                <option value="below" selected>Below vinyl layers</option>
+                <option value="above">Above vinyl layers</option>
+              </select>
+            </label>
+            <div id="layeredOverlayControls" class="layeredOverlayControls" hidden>
+              <div class="propertySection compactSection">
+                <h3>Layered SVG</h3>
+                <label>View mode
+                  <select id="overlaySvgViewMode" title="Choose how layered SVG overlay layers are displayed.">
+                    <option value="original">Original visibility</option>
+                    <option value="selected">Selected layer only</option>
+                    <option value="selected_reference">Selected + reference</option>
+                    <option value="selected_edge">Selected + edge guide</option>
+                    <option value="color_layers">All color layers</option>
+                  </select>
+                </label>
+                <label>SVG layer
+                  <select id="overlaySvgLayerSelect" title="Choose the SVG layer to show when using a selected-layer mode."></select>
+                </label>
+                <div class="smallTools">
+                  <button id="overlaySvgPrevLayer" type="button">Previous Layer</button>
+                  <button id="overlaySvgNextLayer" type="button">Next Layer</button>
+                </div>
+                <p id="overlaySvgLayerInfo" class="hint">Load a layered SVG to flip through its reference, guide, and color layers.</p>
+              </div>
+            </div>
+            <div class="smallTools">
+              <button id="toggleOverlay">Hide / Show</button>
+              <button id="removeOverlay">Remove</button>
+            </div>
+          </section>
+
+          <section id="historyPane" class="dockPane" hidden>
+            <div class="panelHeader">
+              <div>
+                <h2>History</h2>
+                <p>Undo is protected at the loaded source.</p>
+              </div>
+            </div>
+            <div class="historyList" id="historyList">
+              <p>No visible history list yet. Undo/redo still works from the top bar.</p>
+            </div>
+          </section>
+
+          <section id="exportCheckPane" class="dockPane" hidden>
+            <div class="panelHeader">
+              <div>
+                <h2>Export Check</h2>
+                <p>Validate before saving JSON.</p>
+              </div>
+              <span class="badge ready">Ready</span>
+            </div>
+            <div class="exportGrid">
+              <span>Editable layers</span><b id="exportLayerCount">0</b>
+              <span>FH6 JSON export</span><b>Compatible</b>
+              <span>KFPS importer</span><b id="normalExportStatus">Compatible</b>
+              <span>Warnings</span><b id="exportWarningCount">0</b>
+            </div>
+      <p class="hint">The editor saves one FH6-compatible JSON into imgs/editor. Use it with the KFPS Import JSON tab.</p>
+          </section>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="bottomStatus">
+      <span id="status">Ready. Mouse wheel zooms, middle/right drag pans.</span>
+      <span id="bottomCoords">x 0, y 0</span>
+      <span id="bottomZoom">100%</span>
+      <span id="bottomLayers">0 layers</span>
+      <span id="bottomHint">Tip: top layer rows draw over lower rows.</span>
+    </footer>
+  </div>
+
+  <dialog id="helpDialog">
+    <div class="helpHeader">
+      <h2>FH6 Vinyl Editor Help</h2>
+      <button id="closeHelp">Close</button>
+    </div>
+    <div class="helpBody">
+      <section>
+        <h3>What This Editor Does</h3>
+        <p>This editor works on FH6 vinyl JSON, not pixels. It lets you import generated, exported, or hand-edited JSON, edit the vinyl layers visually, trace over a source image, use the FH6 shape library, then export JSON back into the KFPS import workflow.</p>
+        <p>Think of it as a safer desktop workspace for vinyl layer cleanup before you import into FH6.</p>
+      </section>
+      <section>
+        <h3>Basic Safe Workflow</h3>
+        <ol>
+          <li><b>Import JSON</b>: load a generated final JSON, editor JSON, or exported FH6 JSON.</li>
+          <li><b>Add Overlay</b> if you want to trace over the original source image.</li>
+          <li><b>Select / Move</b>: click visible vinyl shapes, box-select groups, or select rows in Layers.</li>
+          <li><b>Clean up</b>: move, stretch, skew, rotate, recolor, delete, duplicate, group, hide, lock, or reorder layers.</li>
+          <li><b>Use Export Check</b>: confirm the layer count and warnings.</li>
+          <li><b>Export</b>: save one FH6-compatible JSON for the KFPS Import JSON tab.</li>
+        </ol>
+      </section>
+      <section>
+        <h3>Tools On The Left</h3>
+        <ul>
+          <li><b>Select / Move</b>: normal editing mode. Click a shape, drag it, box-select, resize, rotate, or edit layer values.</li>
+          <li><b>Shapes</b>: choose shapes from the library and place them into the current viewport.</li>
+          <li><b>Dropper</b>: pick a color from a vinyl shape, or from the source overlay when no shape is under the click.</li>
+          <li><b>Guides</b>: draw editor-only guide lines and helper grids for alignment. Guides do not export as vinyl layers.</li>
+          <li><b>Overlay</b>: add, hide, scale, or remove a source image used for tracing and color sampling.</li>
+        </ul>
+      </section>
+      <section>
+        <h3>Shape Library</h3>
+        <ul>
+          <li>Use the category dropdown to browse shapes in an FH6-like order.</li>
+          <li>Use search for shape names, numbers, families, or type codes.</li>
+          <li>Click a tile to place that shape in the current viewport.</li>
+          <li>Use Place mode to add at the top, insert above/below a selected layer, or replace the selected layer's shape type.</li>
+          <li>Duplicate also follows Place mode, so duplicated layers can be inserted above or below the current selection instead of always going to the top.</li>
+          <li>Replace keeps the selected layer's position, color, alpha, group, lock, and layer order.</li>
+          <li>Use the favorite button on a tile to keep common shapes near the top.</li>
+          <li>New shapes use the active color unless live overlay sampling is enabled.</li>
+          <li>Gradient Shapes preview with their bundled fade masks instead of flat solid fills.</li>
+          <li>Reuse last font size helps repeated font characters stay consistent.</li>
+        </ul>
+      </section>
+      <section>
+        <h3>Layers, Groups, Locking, And Visibility</h3>
+        <ul>
+          <li>Top layer rows draw over lower layer rows.</li>
+          <li>Use <b>Forward</b> and <b>Back</b> to change draw order.</li>
+          <li>Use <b>Group</b> for editor-only organization. Groups help select, hide, or lock related layers without changing export structure.</li>
+          <li><b>Hide Group</b> hides grouped layers while editing. Hidden vinyl layers are still part of the project unless deleted.</li>
+          <li><b>Lock Group</b> prevents accidental edits to grouped layers.</li>
+          <li><b>Visible-only select</b> makes clicks prefer actual visible pixels instead of huge bounding boxes.</li>
+          <li><b>Invert box select</b> selects layers outside a dragged box. It is useful when deleting or isolating everything except a small area.</li>
+        </ul>
+      </section>
+      <section>
+        <h3>Color And Overlay Sampling</h3>
+        <ul>
+          <li>The color panel edits the active layer color and alpha.</li>
+          <li>When multiple layers are selected, color edits apply to every selected unlocked layer.</li>
+          <li>Saved colors work like a small paint palette for colors you reuse often.</li>
+          <li>Clicking a saved color applies it to the current selection. Locked layers are skipped.</li>
+          <li>The overlay image is only a reference. It is never exported into JSON.</li>
+          <li><b>Sample overlay under selection</b> recolors selected layers from the source overlay beneath their current shape area.</li>
+          <li><b>Live auto color from overlay</b> updates color while you move or resize a shape over the overlay.</li>
+          <li>Dominant color is usually better for flat decals. Average color is useful for softer shaded regions.</li>
+        </ul>
+      </section>
+      <section>
+        <h3>Guides, Grid, And Snapping</h3>
+        <ul>
+          <li>Guides are editor-only alignment helpers. They do not export.</li>
+          <li>Select <b>Guides</b>, then left-drag on the canvas to draw a guide line.</li>
+          <li>Right-drag or middle-drag pans the canvas without leaving guide mode.</li>
+          <li>Choose <b>Free line</b>, <b>X axis / horizontal</b>, or <b>Y axis / vertical</b> for guide drawing.</li>
+          <li>Enable the grid when you need repeated spacing or coarse layout checks.</li>
+          <li>Hold <b>Control</b> while moving, scaling, skewing, or reshaping a vinyl layer to snap to guides or grid lines.</li>
+          <li>For resizing/stretching, the side you drag is the side that should snap. The opposite side stays anchored as much as possible.</li>
+          <li>Side handles resize one axis. Corner handles skew/disform by default. Hold <b>Shift</b> while dragging a corner for uniform/global scale.</li>
+          <li>Angled guide snapping can rotate the shape to match the guide. Horizontal/vertical guides can bring it back to straight alignment.</li>
+          <li>Use <b>Clear Guides</b> when helpers get in the way. This removes guides only, not vinyl layers.</li>
+        </ul>
+      </section>
+      <section>
+        <h3>Exports</h3>
+        <ul>
+          <li><b>Export FH6 JSON</b>: full FH6 shape-library export for the unified KFPS importer.</li>
+          <li><b>Save Project</b>: saves editor state for later editing. This is not the same as an FH6 import JSON.</li>
+          <li><b>Load Project</b>: reloads a saved editor project.</li>
+        </ul>
+      </section>
+      <section>
+        <h3>Shortcuts And Mouse Controls</h3>
+        <ul>
+          <li><b>Mouse wheel</b>: Zoom.</li>
+          <li><b>Middle/right drag</b>: Pan.</li>
+          <li><b><span data-shortcut-label="selectTool">V</span> / <span data-shortcut-label="shapeLibrary">S</span> / <span data-shortcut-label="dropper">I</span> / <span data-shortcut-label="guides">G</span> / <span data-shortcut-label="overlay">O</span> / <span data-shortcut-label="sourceTool">R</span></b>: Select, Shapes, Dropper, Guides, Overlay, Source Move. These shortcuts are ignored while typing in a text field.</li>
+          <li><b>Drag empty canvas in Select mode</b>: Box-select layers.</li>
+          <li><b>Hold V while dragging</b>: Force box-select, even if the drag starts on top of a shape.</li>
+          <li><b><span data-shortcut-label="axisLockX">X</span> / <span data-shortcut-label="axisLockY">Y</span> while dragging</b>: Constrain selected shapes to horizontal / vertical movement, Blender-style.</li>
+          <li><b data-shortcut-label="selectionLock">Shift+L</b>: Lock the current selection so accidental canvas clicks do not switch to another shape.</li>
+          <li><b>Control while dragging/editing</b>: Snap to active guides or grid helpers.</li>
+          <li><b>Shift while dragging a corner</b>: Uniform/global scale instead of skew.</li>
+          <li><b>Delete / Backspace</b>: Delete selected layers.</li>
+          <li><b data-shortcut-label="duplicate">Ctrl+D</b>: Duplicate selected layers.</li>
+          <li><b><span data-shortcut-label="flipVertical">F</span> / <span data-shortcut-label="flipHorizontal">Shift+F</span></b>: Flip selected layers vertically / horizontally.</li>
+          <li><b>Ctrl+Z / Ctrl+Y</b>: Undo / redo.</li>
+          <li><b>Arrow keys</b>: Nudge selection. Hold Shift for larger nudges.</li>
+          <li><b><span data-shortcut-label="layerBackward">[</span> / <span data-shortcut-label="layerForward">]</span></b>: Move layer order backward / forward.</li>
+          <li><b>Enter in transform fields</b>: Apply typed position, scale, rotation, skew, or alpha values.</li>
+        </ul>
+      </section>
+      <section class="warning">
+        <h3>Important Limits</h3>
+        <p>This is not a raster image editor. It edits FH6 vinyl layers and exports FH6 JSON. Arbitrary freehand SVG paths are not supported.</p>
+        <p>If an exported design imports incorrectly, first check whether you used the matching export/import path, then save and reload the group in FH6 before judging shape-code imports.</p>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="startupHelpDialog" class="startupHelpDialog">
+    <div class="helpHeader startupHelpHeader">
+      <h2>Read This Before Editing</h2>
+    </div>
+    <div class="helpBody startupHelpBody">
+      <section class="warning">
+        <h3>Most Important Limits</h3>
+        <ul>
+          <li>This edits FH6 vinyl JSON layers, not pixels. It is not Photoshop, Krita, or a raster image editor.</li>
+          <li>Source overlays are only references. They never export into the JSON.</li>
+          <li>Editor groups, guide lines, grids, halos, snap overlays, and helper UI never count as vinyl layers.</li>
+          <li>Export one FH6 JSON, then import it through the KFPS Import JSON tab.</li>
+          <li>If the in-game thumbnail looks wrong after import, save and reopen the vinyl group before judging shape-library imports.</li>
+          <li>Autosave is a temporary safety backup in this app folder/browser. Use <b>Save Project</b> when you want a real editable project file.</li>
+        </ul>
+      </section>
+      <section>
+        <h3>Safe Basic Workflow</h3>
+        <ol>
+          <li><b>Import JSON</b> or start with shapes from the library.</li>
+          <li><b>Add Overlay</b> if you want to trace or sample colors from a source image.</li>
+          <li><b>Edit layers</b>: select, move, stretch, skew, rotate, recolor, group, hide, lock, duplicate, delete, and reorder.</li>
+          <li><b>Check export readiness</b>: confirm layer count and warnings.</li>
+          <li><b>Export FH6 JSON</b> and import it with the main app importer.</li>
+        </ol>
+      </section>
+      <section>
+        <h3>Shortcuts</h3>
+        <div class="shortcutGrid">
+          <b data-shortcut-label="selectTool">V</b><span>Select / Move. Hold while dragging to force box-select from anywhere, even on top of a shape.</span>
+          <b data-shortcut-label="shapeLibrary">S</b><span>Shape Library.</span>
+          <b data-shortcut-label="dropper">I</b><span>Eyedropper.</span>
+          <b data-shortcut-label="guides">G</b><span>Guides / Snap.</span>
+          <b data-shortcut-label="overlay">O</b><span>Overlay / Reference.</span>
+          <b data-shortcut-label="sourceTool">R</b><span>Source Move only.</span>
+          <b><span data-shortcut-label="axisLockX">X</span> / <span data-shortcut-label="axisLockY">Y</span></b><span>Hold while dragging selected shapes to lock movement to horizontal / vertical.</span>
+          <b data-shortcut-label="selectionLock">Shift+L</b><span>Lock current selection against accidental canvas misclicks.</span>
+          <b>Ctrl</b><span>Snap while moving, scaling, skewing, or reshaping.</span>
+          <b>Shift + corner drag</b><span>Uniform/global scale instead of corner skew.</span>
+          <b>Mouse wheel</b><span>Zoom.</span>
+          <b>Middle/right drag</b><span>Pan.</span>
+          <b data-shortcut-label="delete">Delete</b><span>Delete selected layers.</span>
+          <b data-shortcut-label="duplicate">Ctrl+D</b><span>Duplicate selected layers.</span>
+          <b><span data-shortcut-label="undo">Ctrl+Z</span> / <span data-shortcut-label="redo">Ctrl+Y</span></b><span>Undo / redo.</span>
+          <b>Arrow keys</b><span>Nudge selection. Hold Shift for a larger nudge.</span>
+          <b><span data-shortcut-label="layerBackward">[</span> / <span data-shortcut-label="layerForward">]</span></b><span>Move selected layers backward / forward in layer order.</span>
+          <b><span data-shortcut-label="flipVertical">F</span> / <span data-shortcut-label="flipHorizontal">Shift+F</span></b><span>Flip selected layers vertically / horizontally.</span>
+          <b>Enter in fields</b><span>Apply typed transform or alpha values.</span>
+        </div>
+        <button id="openShortcutsFromHelp" type="button">Open Shortcut Menu</button>
+      </section>
+      <section class="startupConfirmBox">
+        <label>
+          <input id="startupHelpDontShow" type="checkbox">
+          I have read and understood this.
+        </label>
+        <button id="startupHelpConfirm" type="button">Confirm And Open Editor</button>
+        <p>The full help menu is always available from the <b>Help</b> button in the top toolbar, near the File actions.</p>
+        <p>This confirmation is saved in this KFPS app folder, so it stays hidden for future launches from this copy.</p>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="autosaveRecoveryDialog" class="startupHelpDialog">
+    <div class="helpHeader startupHelpHeader">
+      <h2>Recover Unsaved Editor Work?</h2>
+    </div>
+    <div class="helpBody startupHelpBody">
+      <section>
+        <h3>Temporary Save Found</h3>
+        <p id="autosaveRecoverySummary">The editor found an unsaved local recovery file.</p>
+        <p>This is only a safety backup from the app folder/browser. Use <b>Save Project</b> once recovered if you want a real project file.</p>
+      </section>
+      <section class="startupConfirmBox">
+        <button id="recoverAutosave" type="button">Recover Work</button>
+        <button id="dismissAutosave" type="button">Not Now</button>
+        <button id="discardAutosave" type="button">Discard Temp Save</button>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="shortcutsDialog" class="shortcutsDialog">
+    <div class="helpHeader">
+      <div>
+        <h2>Editor Shortcuts</h2>
+        <p>Click a shortcut box, then press a one-key or two-key combo. Saved locally for this browser/app instance.</p>
+      </div>
+      <button id="closeShortcuts" type="button">Close</button>
+    </div>
+    <div class="shortcutEditor">
+      <div class="shortcutEditorHeader">
+        <div>
+          <h4>Customize Shortcuts</h4>
+          <p>Examples: <b>F</b>, <b>Shift+F</b>, <b>Ctrl+D</b>. Text fields ignore editor shortcuts.</p>
+        </div>
+        <button id="resetShortcuts" type="button">Reset Defaults</button>
+      </div>
+      <div id="shortcutEditorList" class="shortcutEditorList"></div>
+    </div>
+  </dialog>
+
+  <dialog id="jsonBrowserDialog" class="jsonBrowserDialog">
+    <div class="helpHeader">
+      <div>
+        <h2>Open Vinyl JSON</h2>
+        <p>Choose a generated final, editor export, or a JSON dropped into imgs/exported.</p>
+      </div>
+      <button id="closeJsonBrowser">Close</button>
+    </div>
+    <div class="jsonBrowserToolbar">
+      <label>Source
+        <select id="jsonBrowserSource">
+          <option value="generated" selected>Generated finals</option>
+          <option value="editor">Editor exports</option>
+          <option value="exported">Exported JSONs</option>
+        </select>
+      </label>
+      <button id="refreshJsonBrowser" type="button">Refresh</button>
+      <button id="importJsonFromDisk" type="button" title="Fallback for one-off JSON files outside the app folders.">Import From Disk</button>
+      <span id="jsonBrowserSummary">No JSONs loaded.</span>
+    </div>
+    <div class="jsonBrowserBody">
+      <section class="jsonBrowserSources" aria-label="Available sources">
+        <div id="jsonBrowserGroups" class="jsonBrowserGrid"></div>
+      </section>
+      <section class="jsonBrowserDetails" aria-label="JSON checkpoints">
+        <div class="jsonBrowserPreview">
+          <div class="jsonBrowserPreviewImageWrap">
+            <img id="jsonBrowserPreviewImage" alt="Selected vinyl preview" hidden>
+            <span id="jsonBrowserPreviewEmpty">No preview selected</span>
+          </div>
+          <div>
+            <b id="jsonBrowserTitle">Select a source</b>
+            <p id="jsonBrowserMeta">JSON folders are sorted newest first. Files are sorted high layer count to low.</p>
+          </div>
+        </div>
+        <div id="jsonBrowserEntries" class="jsonBrowserEntries"></div>
+        <div class="jsonBrowserActions">
+          <p id="jsonBrowserStatus">Choose a JSON, then click Select.</p>
+          <button id="selectJsonBrowserEntry" class="primary" type="button" disabled>Select JSON</button>
+        </div>
+      </section>
+    </div>
+  </dialog>
+
+  <dialog id="projectBrowserDialog" class="projectBrowserDialog">
+    <div class="helpHeader">
+      <div>
+        <h2>Load Editor Project</h2>
+        <p>These are internal KFPS project saves from runtime/fabric-editor/projects. They are not shown in the Import JSON browser.</p>
+      </div>
+      <button id="closeProjectBrowser" type="button">Close</button>
+    </div>
+    <div class="projectBrowserToolbar">
+      <button id="refreshProjectBrowser" type="button">Refresh</button>
+      <button id="openProjectFolder" class="compactIconButton" type="button" title="Open the internal project folder so you can drop old project files here in bulk.">Open folder</button>
+      <span id="projectBrowserSummary">No projects loaded.</span>
+    </div>
+    <div id="projectBrowserEntries" class="projectBrowserEntries"></div>
+    <div class="jsonBrowserActions">
+      <p id="projectBrowserStatus">Choose a project, then click Load Project.</p>
+      <button id="selectProjectEntry" class="primary" type="button" disabled>Load Project</button>
+    </div>
+  </dialog>
+
+  <dialog id="themeAdjustDialog" class="themeAdjustDialog">
+    <div class="helpHeader">
+      <div>
+        <h2>Adjust Editor Theme</h2>
+        <p>Edit the current color scheme and save it as a new custom theme file inside runtime/fabric-editor/themes.</p>
+      </div>
+      <button id="closeThemeAdjust" type="button">Close</button>
+    </div>
+    <div class="themeAdjustBody">
+      <label class="themeNameRow">Theme name
+        <input id="themeAdjustName" type="text" value="Custom Theme">
+      </label>
+      <div id="themeAdjustFields" class="themeAdjustFields"></div>
+      <div class="jsonBrowserActions">
+        <p id="themeAdjustStatus">Hex colors get a color picker. RGBA fields stay editable as text for advanced tuning.</p>
+        <button id="saveThemeAdjust" class="primary" type="button">Save As New Theme</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="colorDialog">
+    <div class="helpHeader">
+      <h2>Saved Colors</h2>
+      <button id="closeColorDialog">Close</button>
+    </div>
+    <div class="colorDialogBody">
+      <div class="colorDialogPreview">
+        <span id="activeColorLarge"></span>
+        <div>
+          <b id="activeColorLabel">#ffffff</b>
+          <input id="dialogColorPicker" type="color" value="#ffffff">
+          <p>Pick one of 16 slots, choose a color, then click Save Color to overwrite that slot. The window stays open.</p>
+        </div>
+      </div>
+      <div id="favoriteColorGrid"></div>
+      <div class="smallTools">
+        <button id="saveFavoriteColor">Save Color</button>
+        <button id="removeFavoriteColor">Clear Slot</button>
+        <button id="clearFavoriteColors">Clear Saved Colors</button>
+      </div>
+      <p class="hint">The eyedropper copies a vinyl layer color when you click a shape. If no shape is under the click, it samples the source overlay.</p>
+    </div>
+  </dialog>
+
+  <script src="editor.js"></script>
+</body>
+</html>
