@@ -295,7 +295,7 @@ for %%F in (
     "..\Kloudys Painter Launcher.exe"
     "..\Kloudys Painter.exe"
 ) do (
-    if exist %%~F del /f /q %%~F >nul 2>nul
+    if exist "%%~F" del /f /q "%%~F" >nul 2>nul
 )
 exit /b 0
 
