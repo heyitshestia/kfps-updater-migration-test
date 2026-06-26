@@ -66,7 +66,7 @@ if errorlevel 1 goto :fail
 call :check_update_locks
 if errorlevel 1 goto :fail_quiet
 
-robocopy "%TMP_REPO%" "%CD%" /E /R:2 /W:1 /XD runtime webui-data dist build __pycache__ >nul
+robocopy "%TMP_REPO%" "%CD%" /E /R:2 /W:1 /XD .git runtime webui-data dist build __pycache__ >nul
 if errorlevel 8 (
     call :log "File copy failed during robocopy update copy. Robocopy exit code: %ERRORLEVEL%"
     goto :fail
@@ -272,7 +272,7 @@ if not exist "!QML_BUNDLE_ROOT!\KloudysFH6Painter\" (
 )
 
 call :log "Copying QML app files into this install..."
-robocopy "!QML_BUNDLE_ROOT!\KloudysFH6Painter" "%CD%" /E /R:2 /W:1 /XD runtime imgs webui-data dist build __pycache__ python /XF "*.pyc" >nul
+robocopy "!QML_BUNDLE_ROOT!\KloudysFH6Painter" "%CD%" /E /R:2 /W:1 /XD .git runtime imgs webui-data dist build __pycache__ python /XF "*.pyc" >nul
 if errorlevel 8 (
     call :log "QML bundle app copy failed. Robocopy exit code: %ERRORLEVEL%"
     exit /b 1
@@ -379,18 +379,14 @@ exit /b 0
 
 :cleanup_3x_retired_files
 call :log "Cleaning retired 2.x UI and launcher files..."
-for %%F in (
-    "app_qt.py"
-    "launcher_qt.py"
-    "00_launcher.bat"
-    "04_start_app.bat"
-    "Kloudys Painter Launcher.exe"
-    "Kloudys Painter.exe"
-    "..\Kloudys Painter Launcher.exe"
-    "..\Kloudys Painter.exe"
-) do (
-    if exist "%%~F" del /f /q "%%~F" >nul 2>nul
-)
+if exist "app_qt.py" del /f /q "app_qt.py" >nul 2>nul
+if exist "launcher_qt.py" del /f /q "launcher_qt.py" >nul 2>nul
+if exist "00_launcher.bat" del /f /q "00_launcher.bat" >nul 2>nul
+if exist "04_start_app.bat" del /f /q "04_start_app.bat" >nul 2>nul
+if exist "Kloudys Painter Launcher.exe" del /f /q "Kloudys Painter Launcher.exe" >nul 2>nul
+if exist "Kloudys Painter.exe" del /f /q "Kloudys Painter.exe" >nul 2>nul
+if exist "..\Kloudys Painter Launcher.exe" del /f /q "..\Kloudys Painter Launcher.exe" >nul 2>nul
+if exist "..\Kloudys Painter.exe" del /f /q "..\Kloudys Painter.exe" >nul 2>nul
 if exist "KFPS.Wpf" rmdir /s /q "KFPS.Wpf" >nul 2>nul
 exit /b 0
 
