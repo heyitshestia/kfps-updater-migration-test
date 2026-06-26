@@ -74,7 +74,7 @@ rmdir /s /q "%TMP_PARENT%" >nul 2>nul
 call :capture_current_version FINAL_VERSION
 call :log ""
 call :log "Update complete."
-call :log "Version: !OLD_VERSION! -> !FINAL_VERSION!"
+call :log "Version: !OLD_VERSION! to !FINAL_VERSION!"
 call :log "Backup folder: !BACKUP_DIR!"
 call :log "Run KFPS.exe from the main KFPS folder when you are ready."
 if not "%FORZA_PAINTER_NO_PAUSE%"=="1" pause
