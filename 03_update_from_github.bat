@@ -36,7 +36,7 @@ if exist ".git\" (
         goto :fail
     )
     call :write_build_commit "%CD%"
-    call :install_qml_binary_payload & if errorlevel 1 goto :fail & call :cleanup_retired_files
+    call :cleanup_retired_files
     goto :done
 )
 
