@@ -237,6 +237,7 @@ echo PortableGit installed and ready.
 exit /b 0
 
 :try_local_qml_bundle_update
+call :init_qml_payload_defaults
 set "QML_BUNDLE_UPDATE_DONE="
 set "QML_LOCAL_BUNDLE="
 if defined KFPS_QML_BUNDLE_ZIP (
@@ -293,6 +294,7 @@ set "QML_BUNDLE_UPDATE_DONE=1"
 exit /b 0
 
 :install_qml_binary_payload
+call :init_qml_payload_defaults
 if exist "KFPS.exe" (
     call :log "QML native binary payload is already present in the app root."
     exit /b 0
@@ -319,6 +321,11 @@ if errorlevel 1 (
     exit /b 1
 )
 call :log "QML native binary payload installed."
+exit /b 0
+
+:init_qml_payload_defaults
+if not defined QML_BINARY_ASSET_NAME set "QML_BINARY_ASSET_NAME=KFPS-3.0.12-QML-migration-test.zip"
+if not defined QML_BINARY_ASSET_URL set "QML_BINARY_ASSET_URL=https://github.com/heyitshestia/kfps-updater-migration-test/releases/download/v3.0.12-qml-migration-test/KFPS-3.0.12-QML-migration-test.zip"
 exit /b 0
 
 :cleanup_retired_files
