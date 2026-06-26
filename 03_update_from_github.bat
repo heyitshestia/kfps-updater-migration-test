@@ -377,6 +377,18 @@ if exist "tools\" (
     for /f "delims=" %%A in ('dir /a /b "tools" 2^>nul') do set "TOOLS_HAS_CONTENT=1"
     if not defined TOOLS_HAS_CONTENT rmdir /q "tools" >nul 2>nul
 )
+call :seed_bundle_logo_json
+exit /b 0
+
+:seed_bundle_logo_json
+set "KFPS_LOGO_JSON=assets\app\KFPS Logo.json"
+if not exist "%KFPS_LOGO_JSON%" exit /b 0
+if not exist "imgs\generated\KFPS Logo\finals" mkdir "imgs\generated\KFPS Logo\finals" >nul 2>nul
+if not exist "imgs\exported" mkdir "imgs\exported" >nul 2>nul
+if not exist "imgs\editor\KFPS Logo" mkdir "imgs\editor\KFPS Logo" >nul 2>nul
+copy /y "%KFPS_LOGO_JSON%" "imgs\generated\KFPS Logo\finals\KFPS Logo.3000v2.json" >nul 2>nul
+copy /y "%KFPS_LOGO_JSON%" "imgs\exported\KFPS Logo.json" >nul 2>nul
+copy /y "%KFPS_LOGO_JSON%" "imgs\editor\KFPS Logo\KFPS Logo.json" >nul 2>nul
 exit /b 0
 
 :cleanup_3x_retired_files
