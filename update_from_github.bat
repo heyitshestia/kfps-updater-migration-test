@@ -24,6 +24,10 @@ if errorlevel 1 goto :fail
 call :check_update_locks
 if errorlevel 1 goto :fail_quiet
 
+call :try_local_qml_bundle_update
+if errorlevel 1 goto :fail
+if "!QML_BUNDLE_UPDATE_DONE!"=="1" goto :done
+
 if exist ".git\" (
     call :log "Git checkout detected. Syncing tracked app files to latest %BRANCH%..."
     git fetch origin %BRANCH%
@@ -228,6 +232,62 @@ if errorlevel 1 (
 )
 
 echo PortableGit installed and ready.
+exit /b 0
+
+:try_local_qml_bundle_update
+set "QML_BUNDLE_UPDATE_DONE="
+set "QML_LOCAL_BUNDLE="
+if defined KFPS_QML_BUNDLE_ZIP (
+    if exist "%KFPS_QML_BUNDLE_ZIP%" set "QML_LOCAL_BUNDLE=%KFPS_QML_BUNDLE_ZIP%"
+)
+if not defined QML_LOCAL_BUNDLE (
+    if exist "%CD%\..\%QML_BINARY_ASSET_NAME%" set "QML_LOCAL_BUNDLE=%CD%\..\%QML_BINARY_ASSET_NAME%"
+)
+if not defined QML_LOCAL_BUNDLE (
+    if exist "%USERPROFILE%\Desktop\%QML_BINARY_ASSET_NAME%" set "QML_LOCAL_BUNDLE=%USERPROFILE%\Desktop\%QML_BINARY_ASSET_NAME%"
+)
+if not defined QML_LOCAL_BUNDLE exit /b 0
+
+call :log "Local QML migration bundle found."
+call :log "Bundle: !QML_LOCAL_BUNDLE!"
+call :backup_existing_files
+if errorlevel 1 exit /b 1
+
+set "QML_STAGE=%TEMP%\kfps-qml-bundle-update-%RANDOM%-%RANDOM%"
+if exist "!QML_STAGE!" rmdir /s /q "!QML_STAGE!" >nul 2>nul
+mkdir "!QML_STAGE!" >nul 2>nul
+set "KFPS_QML_STAGE=!QML_STAGE!"
+set "KFPS_QML_BUNDLE=!QML_LOCAL_BUNDLE!"
+set "KFPS_APP_ROOT=%CD%"
+call :log "Extracting QML migration bundle..."
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; Expand-Archive -LiteralPath $env:KFPS_QML_BUNDLE -DestinationPath $env:KFPS_QML_STAGE -Force; $bundleRoot=Get-ChildItem -LiteralPath $env:KFPS_QML_STAGE -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'KloudysFH6Painter') } | Select-Object -First 1; if(-not $bundleRoot){ if(Test-Path (Join-Path $env:KFPS_QML_STAGE 'KloudysFH6Painter')){ $bundleRoot=Get-Item -LiteralPath $env:KFPS_QML_STAGE } }; if(-not $bundleRoot){ throw 'QML bundle does not contain KloudysFH6Painter' }; Set-Content -LiteralPath (Join-Path $env:KFPS_QML_STAGE 'bundle-root.txt') -Value $bundleRoot.FullName -Encoding UTF8"
+if errorlevel 1 (
+    call :log "Failed to extract QML migration bundle."
+    exit /b 1
+)
+for /f "usebackq delims=" %%R in ("!QML_STAGE!\bundle-root.txt") do set "QML_BUNDLE_ROOT=%%R"
+if not exist "!QML_BUNDLE_ROOT!\KloudysFH6Painter\" (
+    call :log "Extracted QML bundle is missing KloudysFH6Painter."
+    exit /b 1
+)
+
+call :log "Copying QML app files into this install..."
+robocopy "!QML_BUNDLE_ROOT!\KloudysFH6Painter" "%CD%" /E /R:2 /W:1 /XD runtime imgs webui-data dist build __pycache__ python /XF "*.pyc" >nul
+if errorlevel 8 (
+    call :log "QML bundle app copy failed. Robocopy exit code: %ERRORLEVEL%"
+    exit /b 1
+)
+
+if exist "!QML_BUNDLE_ROOT!\KFPS.exe" (
+    copy /y "!QML_BUNDLE_ROOT!\KFPS.exe" "%CD%\KFPS.exe" >nul 2>nul
+) else (
+    call :log "QML bundle is missing parent KFPS.exe."
+    exit /b 1
+)
+
+call :cleanup_retired_files
+if exist "!QML_STAGE!" rmdir /s /q "!QML_STAGE!" >nul 2>nul
+set "QML_BUNDLE_UPDATE_DONE=1"
 exit /b 0
 
 :install_qml_binary_payload
