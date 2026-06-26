@@ -4,8 +4,6 @@ cd /d "%~dp0"
 
 set "REPO_URL=https://github.com/heyitshestia/kfps-updater-migration-test.git"
 set "BRANCH=main"
-set "QML_BINARY_ASSET_NAME=KFPS-3.0.12-QML-migration-test.zip"
-set "QML_BINARY_ASSET_URL=https://github.com/heyitshestia/kfps-updater-migration-test/releases/download/v3.0.12-qml-migration-test/KFPS-3.0.12-QML-migration-test.zip"
 
 call :init_update_log
 call :capture_current_version OLD_VERSION
@@ -24,14 +22,8 @@ if errorlevel 1 goto :fail
 call :check_update_locks
 if errorlevel 1 goto :fail_quiet
 
-call :try_local_qml_bundle_update
-if errorlevel 1 goto :fail
-if "!QML_BUNDLE_UPDATE_DONE!"=="1" goto :done
-
 if exist ".git\" (
     call :log "Git checkout detected. Syncing tracked app files to latest %BRANCH%..."
-    git remote set-url origin "%REPO_URL%" >nul 2>nul
-    if errorlevel 1 git remote add origin "%REPO_URL%" >nul 2>nul
     git fetch origin %BRANCH%
     if errorlevel 1 goto :fail
     call :backup_existing_files
@@ -43,10 +35,8 @@ if exist ".git\" (
         call :log "Generated outputs are stored separately and are not intentionally removed."
         goto :fail
     )
-    call :install_qml_binary_payload
-    if errorlevel 1 goto :fail
     call :write_build_commit "%CD%"
-    call :cleanup_retired_files
+    call :install_qml_binary_payload & if errorlevel 1 goto :fail & call :cleanup_retired_files
     goto :done
 )
 
@@ -73,7 +63,6 @@ if errorlevel 8 (
     call :log "File copy failed during robocopy update copy. Robocopy exit code: %ERRORLEVEL%"
     goto :fail
 )
-
 call :install_qml_binary_payload
 if errorlevel 1 goto :fail
 call :cleanup_retired_files
