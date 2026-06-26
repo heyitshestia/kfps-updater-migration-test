@@ -2,7 +2,7 @@
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
-set "REPO_URL=https://github.com/heyitshestia/kfps-updater-migration-test.git"
+set "REPO_URL=https://github.com/heyitshestia/kloudys-forza-painter-suite.git"
 set "BRANCH=main"
 
 call :init_update_log
@@ -228,7 +228,6 @@ exit /b 0
 call :sync_native_root_exe
 if exist "settings\_archive_legacy_2026-05-22" rmdir /s /q "settings\_archive_legacy_2026-05-22" >nul 2>nul
 if exist "settings\_default.ini" del /f /q "settings\_default.ini" >nul 2>nul
-call :sync_launcher_exe
 call :cleanup_3x_retired_files
 for %%F in (
     "settings\a.3000-ultra-sharp.ini"
@@ -273,7 +272,7 @@ for %%F in (
     "docs\GENERATOR_BENCHMARK_PLAN.md"
     "tools\benchmark_generator_settings.py"
 ) do (
-    if exist %%~F del /f /q %%~F >nul 2>nul
+    if exist "%%~F" del /f /q "%%~F" >nul 2>nul
 )
 if exist "tools\__pycache__" rmdir /s /q "tools\__pycache__" >nul 2>nul
 set "TOOLS_HAS_CONTENT="
@@ -297,6 +296,7 @@ for %%F in (
 ) do (
     if exist "%%~F" del /f /q "%%~F" >nul 2>nul
 )
+if exist "KFPS.Wpf" rmdir /s /q "KFPS.Wpf" >nul 2>nul
 exit /b 0
 
 :sync_native_root_exe
@@ -325,38 +325,6 @@ set "KFPS_HANDOFF_SCRIPT=%HANDOFF_SCRIPT%"
 set "KFPS_HANDOFF_SOURCE=%CD%\KFPS.exe"
 set "KFPS_HANDOFF_TARGET=%CD%\..\KFPS.exe"
 set "KFPS_HANDOFF_OLD=%CD%\..\Kloudys Painter Launcher.exe"
-set "KFPS_HANDOFF_LOG=%UPDATE_LOG%"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$script=$env:KFPS_HANDOFF_SCRIPT; $src=$env:KFPS_HANDOFF_SOURCE; $target=$env:KFPS_HANDOFF_TARGET; $old=$env:KFPS_HANDOFF_OLD; $log=$env:KFPS_HANDOFF_LOG; $args='-NoProfile -ExecutionPolicy Bypass -File \"' + $script + '\" -Source \"' + $src + '\" -Target \"' + $target + '\" -OldTarget \"' + $old + '\" -LogFile \"' + $log + '\" -DeleteSelf'; Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList $args"
-exit /b 0
-
-:sync_launcher_exe
-if exist "Kloudys Painter.exe" del /f /q "Kloudys Painter.exe" >nul 2>nul
-for %%I in ("%CD%") do set "CURRENT_FOLDER=%%~nxI"
-if /I not "%CURRENT_FOLDER%"=="KloudysFH6Painter" exit /b 0
-if exist "Kloudys Painter Launcher.exe" (
-    copy /y "Kloudys Painter Launcher.exe" "..\Kloudys Painter Launcher.exe" >nul 2>nul
-    if errorlevel 1 (
-        call :schedule_launcher_handoff
-    ) else (
-        del /f /q "Kloudys Painter Launcher.exe" >nul 2>nul
-    )
-)
-if exist "..\Kloudys Painter.exe" del /f /q "..\Kloudys Painter.exe" >nul 2>nul
-exit /b 0
-
-:schedule_launcher_handoff
-set "HANDOFF_SCRIPT=%CD%\tools\replace_parent_launcher.ps1"
-if not exist "%HANDOFF_SCRIPT%" (
-    call :log "Parent launcher is currently running or locked; kept updated launcher inside KloudysFH6Painter."
-    call :log "Manual fallback: close KFPS, then copy KloudysFH6Painter\Kloudys Painter Launcher.exe over the launcher one folder above."
-    exit /b 0
-)
-call :log "Parent launcher is currently running or locked."
-call :log "Scheduled launcher replacement after KFPS Launcher closes."
-set "KFPS_HANDOFF_SCRIPT=%HANDOFF_SCRIPT%"
-set "KFPS_HANDOFF_SOURCE=%CD%\Kloudys Painter Launcher.exe"
-set "KFPS_HANDOFF_TARGET=%CD%\..\Kloudys Painter Launcher.exe"
-set "KFPS_HANDOFF_OLD=%CD%\..\Kloudys Painter.exe"
 set "KFPS_HANDOFF_LOG=%UPDATE_LOG%"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$script=$env:KFPS_HANDOFF_SCRIPT; $src=$env:KFPS_HANDOFF_SOURCE; $target=$env:KFPS_HANDOFF_TARGET; $old=$env:KFPS_HANDOFF_OLD; $log=$env:KFPS_HANDOFF_LOG; $args='-NoProfile -ExecutionPolicy Bypass -File \"' + $script + '\" -Source \"' + $src + '\" -Target \"' + $target + '\" -OldTarget \"' + $old + '\" -LogFile \"' + $log + '\" -DeleteSelf'; Start-Process -WindowStyle Hidden -FilePath powershell.exe -ArgumentList $args"
 exit /b 0

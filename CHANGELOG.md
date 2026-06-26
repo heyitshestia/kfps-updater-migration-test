@@ -1,5 +1,63 @@
 # Kloudy's FH6 Painter Changelog
 
+## 3.0.12
+- Cleaned the native WPF theme bundle down to Night Blossom and Blackout.
+- Fixed clipped native text fields in Help, Reports, Settings, and custom layer prompts.
+- Removed extra inner borders from the Help search and report title fields.
+- Ships the KFPS logo JSON in every JSON browser source and refreshes those copies on app launch.
+
+## 3.0.11
+- Reworked the native Night Blossom shell with the dedicated animated blossom backdrop.
+- Added dashboard card hover motion and denser ambient petals.
+- Fixed the JSON tab layer-count field so the value is not clipped.
+
+## 3.0.10
+- Fixed the native FM8 export option so it maps to the backend Forza Motorsport profile.
+
+## 3.0.9
+- Changed the dashboard bottom panel into a changelog view while keeping runtime logs on other tabs.
+- Fixed the top version text position so status updates no longer move it around.
+- Adjusted the dashboard changelog textbox spacing so text is not clipped at the top or bottom.
+
+## 3.0.8
+- Fixed generated final JSONs carrying an extra background/canvas layer, so checkpoint layer counts now match the selected target.
+- Added the KFPS logo JSON to the shipped exported JSON folder.
+
+## 3.0.7
+- Set Night Blossom as the only exposed native theme and default theme.
+- Fixed native WPF theme resource updates so frozen brushes and gradients do not trigger UI warnings.
+- Kept the native app as a single-file bundle without loose WPF runtime DLLs.
+
+## 3.0.6
+- Added the first native WPF resource dictionary for Sakura Glass theme materials.
+- Added reusable procedural texture resources and a subtle Sakura texture overlay.
+- Added resource-backed animated button hover/press visuals for future texture and animation work.
+
+## 3.0.5
+- Restored the FH6 1000-layer group/table locator support script that was unintentionally left out of the native 3.x tree.
+
+## 3.0.4
+- Limited the native theme dropdown to Sakura Glass while keeping the other theme definitions available in code.
+- Moved update controls into a dedicated Update tab with current/latest version display.
+- Update availability now changes header text color and blinks the Update tab button instead of using a colored header pill.
+
+## 3.0.3
+- Fixed the Generate preview panel so starting a new run immediately takes over from older JSON/export previews.
+- Live generation preview polling now refreshes when the generator reports preview progress.
+
+## 3.0.2
+- Switched the native version indicator to GitHub's contents API so checks do not get stale raw-cache results.
+
+## 3.0.1
+- Added a centered native version indicator that checks GitHub main every minute.
+- The version indicator turns red and blinks when a newer version is available.
+
+## 3.0.0
+- Replaced the old PySide launcher/app shell with the native KFPS desktop app.
+- Added native self-update handoff so KFPS closes before replacing the root executable.
+- Cleaned the packaged app layout and removed retired 2.x UI files from the shipped tree.
+- Kept generator, editor, importer, exporter, and bundled backend tools wired through the native interface.
+
 ## 2.0.64
 - Updated the FH6 fast locator profile from the latest calibration pass.
 - Fixed calibrated locator fallback so stale game-build profiles no longer block normal fallback scanning.
