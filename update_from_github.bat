@@ -323,6 +323,7 @@ exit /b 0
 
 :cleanup_retired_files
 call :sync_native_root_exe
+call :cleanup_stale_release_git
 if exist "settings\_archive_legacy_2026-05-22" rmdir /s /q "settings\_archive_legacy_2026-05-22" >nul 2>nul
 if exist "settings\_default.ini" del /f /q "settings\_default.ini" >nul 2>nul
 call :cleanup_3x_retired_files
@@ -378,6 +379,16 @@ if exist "tools\" (
     if not defined TOOLS_HAS_CONTENT rmdir /q "tools" >nul 2>nul
 )
 call :seed_bundle_logo_json
+exit /b 0
+
+:cleanup_stale_release_git
+for %%I in ("%CD%") do set "CURRENT_FOLDER=%%~nxI"
+if /I not "%CURRENT_FOLDER%"=="KloudysFH6Painter" exit /b 0
+if not exist "..\KFPS.exe" exit /b 0
+if exist ".git\" (
+    rmdir /s /q ".git" >nul 2>nul
+    if not exist ".git\" call :log "Removed stale release Git metadata."
+)
 exit /b 0
 
 :seed_bundle_logo_json
