@@ -15,11 +15,12 @@ dist/
 build/
 python/
 Images/
-imgs/generated/
-imgs/luma-bands/
-imgs/handmade/
-imgs/exported/
-imgs/editor/
+
+# User data and generated/editor/exported vinyl JSONs are local-only.
+# Release bundles create these folders empty at packaging time.
+imgs/**
+!imgs/
+!imgs/.gitkeep
 projects/
 *.exe.bak-*
 BUILD_COMMIT
