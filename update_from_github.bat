@@ -2,8 +2,10 @@
 setlocal EnableExtensions EnableDelayedExpansion
 cd /d "%~dp0"
 
-set "REPO_URL=https://github.com/heyitshestia/kloudys-forza-painter-suite.git"
+set "REPO_URL=https://github.com/heyitshestia/kfps-updater-migration-test.git"
 set "BRANCH=main"
+set "QML_BINARY_ASSET_NAME=KFPS-3.0.12-QML-migration-test.zip"
+set "QML_BINARY_ASSET_URL=https://github.com/heyitshestia/kfps-updater-migration-test/releases/download/v3.0.12-qml-migration-test/KFPS-3.0.12-QML-migration-test.zip"
 
 call :init_update_log
 call :capture_current_version OLD_VERSION
@@ -35,6 +37,8 @@ if exist ".git\" (
         call :log "Generated outputs are stored separately and are not intentionally removed."
         goto :fail
     )
+    call :install_qml_binary_payload
+    if errorlevel 1 goto :fail
     call :write_build_commit "%CD%"
     call :cleanup_retired_files
     goto :done
@@ -64,6 +68,8 @@ if errorlevel 8 (
     goto :fail
 )
 
+call :install_qml_binary_payload
+if errorlevel 1 goto :fail
 call :cleanup_retired_files
 call :write_build_commit "%TMP_REPO%"
 
@@ -222,6 +228,35 @@ if errorlevel 1 (
 )
 
 echo PortableGit installed and ready.
+exit /b 0
+
+:install_qml_binary_payload
+if exist "KFPS.exe" (
+    call :log "QML native binary payload is already present in the app root."
+    exit /b 0
+)
+set "QML_PAYLOAD_ZIP="
+if defined KFPS_QML_BUNDLE_ZIP (
+    if exist "%KFPS_QML_BUNDLE_ZIP%" set "QML_PAYLOAD_ZIP=%KFPS_QML_BUNDLE_ZIP%"
+)
+if not defined QML_PAYLOAD_ZIP (
+    if exist "%CD%\..\%QML_BINARY_ASSET_NAME%" set "QML_PAYLOAD_ZIP=%CD%\..\%QML_BINARY_ASSET_NAME%"
+)
+if not defined QML_PAYLOAD_ZIP (
+    if exist "%USERPROFILE%\Desktop\%QML_BINARY_ASSET_NAME%" set "QML_PAYLOAD_ZIP=%USERPROFILE%\Desktop\%QML_BINARY_ASSET_NAME%"
+)
+set "KFPS_APP_ROOT=%CD%"
+set "KFPS_QML_PAYLOAD_ZIP=%QML_PAYLOAD_ZIP%"
+set "KFPS_QML_PAYLOAD_URL=%QML_BINARY_ASSET_URL%"
+set "KFPS_QML_PAYLOAD_NAME=%QML_BINARY_ASSET_NAME%"
+call :log "Installing QML native binary payload..."
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $app=$env:KFPS_APP_ROOT; $zip=$env:KFPS_QML_PAYLOAD_ZIP; if(-not $zip -or -not (Test-Path -LiteralPath $zip)){ $zip=Join-Path $env:TEMP $env:KFPS_QML_PAYLOAD_NAME; $headers=@{'User-Agent'='KFPS-Updater'}; if($env:GH_TOKEN){ $headers['Authorization']='Bearer ' + $env:GH_TOKEN }; Invoke-WebRequest -UseBasicParsing -Uri $env:KFPS_QML_PAYLOAD_URL -OutFile $zip -Headers $headers }; $stage=Join-Path $env:TEMP ('kfps-qml-payload-' + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Force -Path $stage | Out-Null; Expand-Archive -LiteralPath $zip -DestinationPath $stage -Force; $exe=Get-ChildItem -LiteralPath $stage -Recurse -File -Filter 'KFPS.exe' | Where-Object { $_.FullName -notmatch '\\KloudysFH6Painter\\KFPS\.exe$' } | Select-Object -First 1; if(-not $exe){ throw 'QML payload did not contain a parent KFPS.exe' }; Copy-Item -LiteralPath $exe.FullName -Destination (Join-Path $app 'KFPS.exe') -Force; Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue"
+if errorlevel 1 (
+    call :log "Failed to install QML native binary payload."
+    call :log "For private migration tests, place %QML_BINARY_ASSET_NAME% next to the KFPS folder or set KFPS_QML_BUNDLE_ZIP."
+    exit /b 1
+)
+call :log "QML native binary payload installed."
 exit /b 0
 
 :cleanup_retired_files
