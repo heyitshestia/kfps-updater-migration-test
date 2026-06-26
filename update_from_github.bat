@@ -58,7 +58,7 @@ if errorlevel 1 goto :fail
 call :check_update_locks
 if errorlevel 1 goto :fail_quiet
 
-robocopy "%TMP_REPO%" "%CD%" /E /R:2 /W:1 /XD .git runtime webui-data dist build __pycache__ >nul
+robocopy "%TMP_REPO%" "%CD%" /E /R:2 /W:1 /XD runtime webui-data dist build __pycache__ >nul
 if errorlevel 8 (
     call :log "File copy failed during robocopy update copy. Robocopy exit code: %ERRORLEVEL%"
     goto :fail
