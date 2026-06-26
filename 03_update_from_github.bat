@@ -260,7 +260,7 @@ set "KFPS_QML_STAGE=!QML_STAGE!"
 set "KFPS_QML_BUNDLE=!QML_LOCAL_BUNDLE!"
 set "KFPS_APP_ROOT=%CD%"
 call :log "Extracting QML migration bundle..."
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; Expand-Archive -LiteralPath $env:KFPS_QML_BUNDLE -DestinationPath $env:KFPS_QML_STAGE -Force; $bundleRoot=Get-ChildItem -LiteralPath $env:KFPS_QML_STAGE -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'KloudysFH6Painter') } | Select-Object -First 1; if(-not $bundleRoot){ if(Test-Path (Join-Path $env:KFPS_QML_STAGE 'KloudysFH6Painter')){ $bundleRoot=Get-Item -LiteralPath $env:KFPS_QML_STAGE } }; if(-not $bundleRoot){ throw 'QML bundle does not contain KloudysFH6Painter' }; Set-Content -LiteralPath (Join-Path $env:KFPS_QML_STAGE 'bundle-root.txt') -Value $bundleRoot.FullName -Encoding UTF8"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; Expand-Archive -LiteralPath $env:KFPS_QML_BUNDLE -DestinationPath $env:KFPS_QML_STAGE -Force; $bundleRoot=Get-ChildItem -LiteralPath $env:KFPS_QML_STAGE -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'KloudysFH6Painter') } | Select-Object -First 1; if(-not $bundleRoot){ if(Test-Path (Join-Path $env:KFPS_QML_STAGE 'KloudysFH6Painter')){ $bundleRoot=Get-Item -LiteralPath $env:KFPS_QML_STAGE } }; if(-not $bundleRoot){ throw 'QML bundle does not contain KloudysFH6Painter' }; Set-Content -LiteralPath (Join-Path $env:KFPS_QML_STAGE 'bundle-root.txt') -Value $bundleRoot.FullName -Encoding ASCII"
 if errorlevel 1 (
     call :log "Failed to extract QML migration bundle."
     exit /b 1
