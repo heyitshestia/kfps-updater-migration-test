@@ -30,6 +30,8 @@ if "!QML_BUNDLE_UPDATE_DONE!"=="1" goto :done
 
 if exist ".git\" (
     call :log "Git checkout detected. Syncing tracked app files to latest %BRANCH%..."
+    git remote set-url origin "%REPO_URL%" >nul 2>nul
+    if errorlevel 1 git remote add origin "%REPO_URL%" >nul 2>nul
     git fetch origin %BRANCH%
     if errorlevel 1 goto :fail
     call :backup_existing_files
